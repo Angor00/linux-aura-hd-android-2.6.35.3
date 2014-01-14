@@ -1,7 +1,6 @@
-#
-# Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35.3
-# Wed Aug 15 13:36:26 2012
+# Wed Jan  8 12:18:38 2014
+#
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -362,7 +361,7 @@ CONFIG_RUNTIME_PHYS_OFFSET=y
 #
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="noinitrd console=ttymxc0,115200 root=/dev/mtdblock2 rw rootfstype=jffs2 ip=off"
+CONFIG_CMDLINE="noinitrd console=ttymxc1,115200 root=/dev/mtdblock2 rw rootfstype=jffs2 ip=off"
 # CONFIG_CMDLINE_FORCE is not set
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
