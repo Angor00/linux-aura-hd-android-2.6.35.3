@@ -14,6 +14,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/wait.h>
 #include <linux/fsl_devices.h>
 #include <linux/platform_device.h>
 

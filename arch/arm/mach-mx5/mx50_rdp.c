@@ -31,6 +31,10 @@
 #include <linux/platform_device.h>
 #include <linux/fsl_devices.h>
 #include <linux/spi/spi.h>
+// Angor
+#include <linux/android_pmem.h>
+#include <linux/usb/android_composite.h>
+// Angor
 #include <linux/i2c.h>
 #include <linux/ata.h>
 #include <linux/mtd/mtd.h>
@@ -73,8 +77,9 @@
 #include "crm_regs.h"
 #include "dma-apbh.h"
 
-
 #include "ntx_hwconfig.h"
+
+#define DISABLE_GPU
 
 //#define E606C2_GPIO_KEY
 #define EPD_TIMING_TW20110817		1
@@ -312,6 +317,9 @@ static iomux_v3_cfg_t mx50_rdp[] = {
 
 	/* EPD PMIC intr */
 	MX50_PAD_UART4_RXD__GPIO_6_17,
+
+// Angor:
+	MX50_PAD_EPITO__USBH1_PWR,
 
 	/* Need to comment below line if
 	 * one needs to debug owire.
@@ -665,6 +673,8 @@ static iomux_v3_cfg_t suspend_enter_pads[] = {
 
 	/* NVCC_MISC_PWM_USB_OTG pins */
 //	MX50_PAD_PWM1__GPIO_6_24,
+	MX50_PAD_PWM1__GPIO_6_24,
+	MX50_PAD_PWM2__GPIO_6_25,
 	MX50_PAD_EPITO__GPIO_6_27,
 	MX50_PAD_WDOG__GPIO_6_28,
 
@@ -2259,6 +2269,7 @@ static void mxc_register_powerkey(pwrkey_callback pk_cb)
 
 static int mxc_pwrkey_getstatus(int id)
 {
+#if 0
 	int sense, off = 3;
 
 //	pmic_read_reg(REG_INT_SENSE1, &sense, 0xffffffff);
@@ -2276,6 +2287,9 @@ static int mxc_pwrkey_getstatus(int id)
 		return 0;
 
 	return 1;
+#else
+	return gpio_get_value (GPIO_PWR_SW) ? 0 : 1;
+#endif
 }
 
 static struct power_key_platform_data pwrkey_data = {
@@ -2295,6 +2309,80 @@ static int __init w1_setup(char *__unused)
 }
 
 __setup("w1", w1_setup);
+
+// Angor: add androidizm
+static struct android_pmem_platform_data android_pmem_data = {
+	.name = "pmem_adsp",
+	.size = SZ_8M,
+};
+
+static struct android_pmem_platform_data android_pmem_gpu_data = {
+	.name = "pmem_gpu",
+	.size = SZ_32M,
+};
+
+static char *usb_functions_ums[] = {
+	"usb_mass_storage",
+};
+
+static char *usb_functions_ums_adb[] = {
+	"usb_mass_storage",
+	"adb",
+};
+
+static char *usb_functions_rndis[] = {
+	"rndis",
+};
+
+static char *usb_functions_all[] = {
+	"rndis",
+	"usb_mass_storage",
+	"adb"
+};
+
+static struct android_usb_product usb_products[] = {
+	{
+		.product_id	= 0x1688,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums),
+		.functions	= usb_functions_ums,
+	},
+	{
+		.product_id	= 0x1689,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums_adb),
+		.functions	= usb_functions_ums_adb,
+	},
+	{
+		.product_id	= 0x1698,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
+		.functions	= usb_functions_rndis,
+	},
+};
+
+static struct usb_mass_storage_platform_data mass_storage_data = {
+	.nluns		= 2,  //by dh: only 2 LUNs for USB (stupid Windows displays them all)
+	.vendor		= "Deutsche Telekom",
+	.product	= "Tolino",
+	.release	= 0x0100,
+};
+
+static struct usb_ether_platform_data rndis_data = {
+	.vendorID	= 0x1F85,
+	.vendorDescr	= "Netronix",
+};
+
+static struct android_usb_platform_data android_usb_data = {
+	.vendor_id      = 0x1F85,
+	.product_id     = 0x1688,
+	.version        = 0x0100,
+	.product_name   = "Tolino",
+	.manufacturer_name = "Deutsche Telekom",
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
+};
+
+// Angor
 
 static int __initdata enable_keypad = {0};
 static int __init keypad_setup(char *__unused)
@@ -2475,7 +2563,14 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 {
 	struct tag *t;
 	char *str;
-	int capable_to_1GHz = 0;	
+	int capable_to_1GHz = 0;
+	struct tag *mem_tag = tags;
+
+#ifdef CONFIG_ANDROID_PMEM
+	int pmem_size = android_pmem_data.size;
+	int pmem_gpu_size = android_pmem_gpu_data.size;
+	int total_mem = 0;
+#endif
 
 	mxc_set_cpu_type(MXC_CPU_MX50);
 
@@ -2504,6 +2599,29 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 	}
 	set_num_cpu_wp = mx50_rdp_set_num_cpu_wp;
 	get_dvfs_core_wp = mx50_rdp_get_dvfs_core_table;
+
+#ifdef CONFIG_ANDROID_PMEM
+	t = mem_tag;
+	mem_tag = 0;
+	for_each_tag(mem_tag, t) {
+		if (mem_tag->hdr.tag == ATAG_MEM) {
+			total_mem = mem_tag->u.mem.size;
+			break;
+		}
+	}
+
+	if (mem_tag) {
+
+		android_pmem_data.start = mem_tag->u.mem.start
+			+ total_mem - pmem_gpu_size - pmem_size;
+		android_pmem_gpu_data.start = android_pmem_data.start
+			+ pmem_size;
+
+		mem_tag->u.mem.size =
+			android_pmem_data.start - mem_tag->u.mem.start;
+
+	}
+#endif
 }
 
 static void __init mx50_rdp_io_init(void)
@@ -2738,6 +2856,7 @@ static void _parse_cmdline(void)
 	}
 }
 
+// #if 0
 static void mxc_register_usb_plug(void* pk_cb)
 {
 	pmic_event_callback_t usb_plug_event;
@@ -2762,6 +2881,7 @@ struct platform_device mxc_usb_plug_device = {
 		.name = "usb_plug",
 		.id = 0,
 	};
+// #endif
 
 /*!
  * Board specific initialization.
@@ -2985,6 +3105,17 @@ static void __init mxc_board_init(void)
 				ARRAY_SIZE(mxc_dataflash_device));
 */
 
+// Angor
+
+	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
+	mxc_register_device(&mxc_android_pmem_gpu_device,
+					&android_pmem_gpu_data);
+	mxc_register_device(&usb_mass_storage_device, &mass_storage_data);
+	mxc_register_device(&usb_rndis_device, &rndis_data);
+	mxc_register_device(&android_usb_device, &android_usb_data);
+
+// Angor
+
 //	mxc_register_device(&max17135_sensor_device, NULL);
 	mxc_register_device(&epdc_device, &epdc_data);
 	mxc_register_device(&lcd_wvga_device, &lcd_wvga_data);
@@ -2996,7 +3127,10 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxs_viim, NULL);
 	mxc_register_device(&mxc_rngb_device, NULL);
 	mxc_register_device(&dcp_device, NULL);
+
+// Angor:
 	mxc_register_device(&mxc_usb_plug_device, &usbplug_data);
+
 //	mxc_register_device(&mxc_powerkey_device, &pwrkey_data);
 	mxc_register_device(&fixed_volt_reg_device, &fixed_volt_reg_pdata);
 	if (mx50_revision() >= IMX_CHIP_REVISION_1_1)
@@ -3037,13 +3171,57 @@ static struct sys_timer mxc_timer = {
 	.init	= mx50_rdp_timer_init,
 };
 
+// Angor
+#if 0
+static void __init fixup_android_board(struct machine_desc *desc, struct tag *tags,
+				   char **cmdline, struct meminfo *mi)
+{
+	int pmem_size = android_pmem_data.size;
+	int pmem_gpu_size = android_pmem_gpu_data.size;
+	struct tag *mem_tag = 0;
+	int total_mem = 0;
+
+	mxc_set_cpu_type(MXC_CPU_MX50);
+
+	get_cpu_wp = mx50_rdp_get_cpu_wp;
+	set_num_cpu_wp = mx50_rdp_set_num_cpu_wp;
+	get_dvfs_core_wp = mx50_rdp_get_dvfs_core_table;
+	num_cpu_wp = ARRAY_SIZE(cpu_wp_auto);
+
+	for_each_tag(mem_tag, tags) {
+		if (mem_tag->hdr.tag == ATAG_MEM) {
+			total_mem = mem_tag->u.mem.size;
+			break;
+		}
+	}
+
+	if (mem_tag) {
+
+		android_pmem_data.start = mem_tag->u.mem.start
+			+ total_mem - pmem_gpu_size - pmem_size;
+		android_pmem_gpu_data.start = android_pmem_data.start
+			+ pmem_size;
+
+		mem_tag->u.mem.size =
+			android_pmem_data.start - mem_tag->u.mem.start;
+
+	}
+
+}
+// Angor
+#endif
+
 /*
  * The following uses standard kernel macros define in arch.h in order to
  * initialize __mach_desc_MX50_RDP data structure.
  */
 MACHINE_START(MX50_RDP, "Freescale MX50 Reference Design Platform")
 	/* Maintainer: Freescale Semiconductor, Inc. */
+//#ifdef CONFIG_ANDROID_PMEM
+//	.fixup = fixup_android_board,
+//#else
 	.fixup = fixup_mxc_board,
+//#endif
 	.map_io = mx5_map_io,
 	.init_irq = mx5_init_irq,
 	.init_machine = mxc_board_init,

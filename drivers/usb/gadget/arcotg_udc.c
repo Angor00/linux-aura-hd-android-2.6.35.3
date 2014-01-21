@@ -11,8 +11,11 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#undef DEBUG
-#undef VERBOSE
+// #undef DEBUG
+// #undef VERBOSE
+
+#define DEBUG
+#define VERBOSE
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -48,6 +51,7 @@
 #include <asm/unaligned.h>
 #include <asm/dma.h>
 #include <asm/cacheflush.h>
+#include <asm/mach-types.h>
 
 #include "arcotg_udc.h"
 #include <mach/arc_otg.h>
@@ -573,6 +577,9 @@ void dr_ep_setup(unsigned char ep_num, unsigned char dir, unsigned char ep_type)
 	unsigned int tmp_epctrl = 0;
 
 	tmp_epctrl = fsl_readl(&dr_regs->endptctrl[ep_num]);
+
+	printk(KERN_INFO "%s (%d)\ttmp_epctrl=%d\n", __func__, __LINE__, tmp_epctrl);
+
 	if (dir) {
 		if (ep_num)
 			tmp_epctrl |= EPCTRL_TX_DATA_TOGGLE_RST;
@@ -586,6 +593,8 @@ void dr_ep_setup(unsigned char ep_num, unsigned char dir, unsigned char ep_type)
 		tmp_epctrl |= ((unsigned int)(ep_type)
 				<< EPCTRL_RX_EP_TYPE_SHIFT);
 	}
+
+	printk(KERN_INFO "%s (%d)\ttmp_epctrl=%d\n", __func__, __LINE__, tmp_epctrl);
 
 	fsl_writel(tmp_epctrl, &dr_regs->endptctrl[ep_num]);
 }
@@ -681,8 +690,11 @@ static void ep0_setup(struct fsl_udc *udc)
 			USB_MAX_CTRL_PAYLOAD, 0, 0);
 	struct_ep_qh_setup(udc, 0, USB_SEND, USB_ENDPOINT_XFER_CONTROL,
 			USB_MAX_CTRL_PAYLOAD, 0, 0);
+//	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
 	dr_ep_setup(0, USB_RECV, USB_ENDPOINT_XFER_CONTROL);
+//	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
 	dr_ep_setup(0, USB_SEND, USB_ENDPOINT_XFER_CONTROL);
+//	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
 
 	return;
 
@@ -2163,9 +2175,13 @@ bool try_wake_up_udc(struct fsl_udc *udc)
 	if (irq_src & OTGSC_B_SESSION_VALID_IRQ_STS) {
 		u32 tmp;
 		fsl_writel(irq_src, &dr_regs->otgsc);
+		/* For mx53 loco board, the debug ID value is 0 and
+		 * DO NOT support OTG function
+		 */
+		if (!machine_is_mx53_loco())
 		/* only handle device interrupt event */
-		if (!(fsl_readl(&dr_regs->otgsc) & OTGSC_STS_USB_ID))
-			return false;
+			if (!(fsl_readl(&dr_regs->otgsc) & OTGSC_STS_USB_ID))
+				return false;
 
 		tmp = fsl_readl(&dr_regs->usbcmd);
 		/* check BSV bit to see if fall or rise */
@@ -2813,13 +2829,15 @@ static int __init struct_ep_setup(struct fsl_udc *udc, unsigned char index,
  * all intialization operations implemented here except enabling usb_intr reg
  * board setup should have been done in the platform code
  */
-static int __init fsl_udc_probe(struct platform_device *pdev)
+static int __devinit fsl_udc_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct fsl_usb2_platform_data *pdata = pdev->dev.platform_data;
 	int ret = -ENODEV;
 	unsigned int i;
 	u32 dccparams;
+
+	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
 
 	udc_controller = kzalloc(sizeof(struct fsl_udc), GFP_KERNEL);
 	if (udc_controller == NULL) {
@@ -2937,8 +2955,12 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto err3;
 
+	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
+
 	/* setup QH and epctrl for ep0 */
 	ep0_setup(udc_controller);
+
+	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
 
 	/* setup udc->eps[] for ep0 */
 	struct_ep_setup(udc_controller, 0, "ep0", 0);
@@ -3007,6 +3029,9 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	dr_clk_gate(false);
 
 	create_proc_file();
+
+	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
+
 	return 0;
 
 err4:
@@ -3024,6 +3049,9 @@ err1:
 err1a:
 	kfree(udc_controller);
 	udc_controller = NULL;
+
+	printk(KERN_INFO "%s (%d)\n", __func__, __LINE__);
+
 	return ret;
 }
 
@@ -3121,8 +3149,8 @@ static int udc_suspend(struct fsl_udc *udc)
 		else
 			dr_wake_up_enable(udc, true);
 	}
-	mode = fsl_readl(&dr_regs->usbmode) & USB_MODE_CTRL_MODE_MASK;
-	usbcmd = fsl_readl(&dr_regs->usbcmd);
+	// mode = fsl_readl(&dr_regs->usbmode) & USB_MODE_CTRL_MODE_MASK;
+	// usbcmd = fsl_readl(&dr_regs->usbcmd);
 
 	/*
 	 * If the controller is already stopped, then this must be a
@@ -3134,6 +3162,8 @@ static int udc_suspend(struct fsl_udc *udc)
 		goto out;
 	}
 
+	mode = fsl_readl(&dr_regs->usbmode) & USB_MODE_CTRL_MODE_MASK;
+	usbcmd = fsl_readl(&dr_regs->usbcmd);
 	if (mode != USB_MODE_CTRL_MODE_DEVICE) {
 		printk(KERN_DEBUG "gadget not in device mode, leaving early\n");
 		goto out;
@@ -3155,7 +3185,8 @@ static int udc_suspend(struct fsl_udc *udc)
 	 * In that case, the usb device can be remained on suspend state
 	 * and the dp will not be changed.
 	 */
-	if (!(fsl_readl(&dr_regs->otgsc) & OTGSC_B_SESSION_VALID)) {
+//	if (!(fsl_readl(&dr_regs->otgsc) & OTGSC_B_SESSION_VALID)) {
+	if (!(fsl_readl(&dr_regs->otgsc) & OTGSC_A_BUS_VALID)) {
 		/* stop the controller */
 		usbcmd = fsl_readl(&dr_regs->usbcmd) & ~USB_CMD_RUN_STOP;
 		fsl_writel(usbcmd, &dr_regs->usbcmd);
@@ -3164,9 +3195,18 @@ static int udc_suspend(struct fsl_udc *udc)
 	dr_phy_low_power_mode(udc, true);
 	printk(KERN_DEBUG "USB Gadget suspend ends\n");
 out:
+	if (udc->suspended > 1) {
+		pr_warning(
+		"It's the case usb device is on otg port and the gadget driver"
+		"is loaded during boots up\n"
+		"So, do not increase suspended counter Or there is a error, "
+		"please debug it !!! \n"
+		);
+		return 0;
+	}
 	udc->suspended++;
-	if (udc->suspended > 2)
-		printk(KERN_ERR "ERROR: suspended times > 2\n");
+	// if (udc->suspended > 2)
+	//	printk(KERN_ERR "ERROR: suspended times > 2\n");
 
 	return 0;
 }
@@ -3178,6 +3218,8 @@ out:
 static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	int ret;
+	pr_debug("%s(): stopped %d  suspended %d\n", __func__,
+		 udc_controller->stopped, udc_controller->suspended);
 #ifdef CONFIG_USB_OTG
 	if (udc_controller->transceiver->gadget == NULL)
 		return 0;

@@ -536,6 +536,35 @@ static void __init mm_init(void)
 	vmalloc_init();
 }
 
+
+//angela add serial number
+void _cmdline_serialno(char *serialno_str)
+{
+#if 0
+/*
+	char proc_cmdline[COMMAND_LINE_SIZE];
+	memcpy(proc_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+	proc_cmdline[COMMAND_LINE_SIZE-1] = '\0';
+
+	char *serialno = 0;
+	char *temp_ptr = 0;
+	serialno = strstr(proc_cmdline, "serialno");
+	if(serialno != NULL)
+	{
+		temp_ptr = strchr(serialno, " ");
+		if(temp_ptr != NULL)
+			*temp_ptr = '\0'; // change " " to '\0'
+		serialno = serialno+9; // ex:android.serialno=E60612A, point to "E"
+		printk(KERN_NOTICE "proc/cmdline : androidboot.serialno = %s\n", serialno);
+
+		strcpy(serialno_str, serialno);
+	}else{
+*/
+		strcpy(serialno_str, "no_serialno_cmd");
+//	}
+#endif
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
