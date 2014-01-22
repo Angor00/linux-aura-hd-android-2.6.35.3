@@ -3106,14 +3106,14 @@ static void __init mxc_board_init(void)
 */
 
 // Angor
-
-	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
-	mxc_register_device(&mxc_android_pmem_gpu_device,
-					&android_pmem_gpu_data);
+/*
+//	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
+//	mxc_register_device(&mxc_android_pmem_gpu_device,
+//					&android_pmem_gpu_data);
 	mxc_register_device(&usb_mass_storage_device, &mass_storage_data);
 	mxc_register_device(&usb_rndis_device, &rndis_data);
 	mxc_register_device(&android_usb_device, &android_usb_data);
-
+*/
 // Angor
 
 //	mxc_register_device(&max17135_sensor_device, NULL);

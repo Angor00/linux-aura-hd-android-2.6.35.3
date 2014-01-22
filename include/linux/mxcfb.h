@@ -29,6 +29,8 @@
 #define FB_SYNC_CLK_IDLE_EN	0x10000000
 #define FB_SYNC_SHARP_MODE	0x08000000
 #define FB_SYNC_SWAP_RGB	0x04000000
+#define FB_ACCEL_TRIPLE_FLAG	0x00000000
+#define FB_ACCEL_DOUBLE_FLAG	0x00000001
 
 struct mxcfb_gbl_alpha {
 	int enable;
@@ -85,11 +87,19 @@ struct mxcfb_rect {
 #define EPDC_FLAG_ENABLE_INVERSION		0x01
 #define EPDC_FLAG_FORCE_MONOCHROME		0x02
 #define EPDC_FLAG_USE_ALT_BUFFER		0x100
+#define EPDC_FLAG_USE_DITHERING_Y1		0x2000
+#define EPDC_FLAG_USE_DITHERING_Y4		0x4000
 
 #define FB_POWERDOWN_DISABLE			-1
 
+#define FB_FINISH_RENDER 1;
+#define FB_STILL_RENDERING 0;
+
+#define NO_ONE_WANT_TO_CHECK 0;
+#define SOMEONE_WANT_TO_CHECK 1;
+
 struct mxcfb_alt_buffer_data {
-	void *virt_addr;
+//	void *virt_addr;
 	__u32 phys_addr;
 	__u32 width;	/* width of entire buffer */
 	__u32 height;	/* height of entire buffer */
@@ -141,6 +151,8 @@ struct mxcfb_waveform_modes {
 #define MXCFB_SET_PWRDOWN_DELAY		_IOW('F', 0x30, int32_t)
 #define MXCFB_GET_PWRDOWN_DELAY		_IOR('F', 0x31, int32_t)
 #define MXCFB_SET_UPDATE_SCHEME		_IOW('F', 0x32, __u32)
+#define MXCFB_SET_UPDATE_MODE		_IOW('F', 0x33, int32_t)
+#define MXCFB_GET_UPDATE_MODE		_IOR('F', 0x34, int32_t)
 #define MXCFB_SET_MERGE_ON_WAVEFORM_MISMATCH	_IOW('F', 0x37, int32_t)
 
 #ifdef __KERNEL__
@@ -163,6 +175,8 @@ int mxcfb_set_refresh_mode(struct fb_info *fbi, int mode,
 			   struct mxcfb_rect *update_region);
 void mxcfb_register_mode(int disp_port,
 		const struct fb_videomode *modedb,
+		int num_modes, int dev_mode);
+void mxcfb_elcdif_register_mode(const struct fb_videomode *modedb,
 		int num_modes, int dev_mode);
 
 void mxcfb_register_presetup(int disp_port,
