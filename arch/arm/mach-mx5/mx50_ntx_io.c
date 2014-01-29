@@ -114,7 +114,7 @@
 
 
 #define		DEVICE_NAME 		"ntx_io"		// "pvi_io"
-#define		DEVICE_MINJOR		190
+#define		DEVICE_MINOR		190
 
 #define  CM_PLATFORM		164
 #define  CM_HWCONFIG		165
@@ -138,7 +138,7 @@
 //kay 20081110 for detecting SD write protect
 #define	CM_SD_PROTECT			120
 #define	SYS_AUTO_POWER_ON 		0xC4	// 196 Joseph 120620
-                            	
+
 //20090216 for detecting controller
 #define	CM_CONTROLLER			121
 
@@ -148,7 +148,7 @@
 #define	CM_SYSTEM_RESET			124
 #define	CM_USB_HOST_PWR			125
 #define	CM_BLUETOOTH_PWR		126
-#define	CM_TELLPID				99	
+#define	CM_TELLPID				99
 #define CM_LED_BLINK 			127
 #define CM_TOUCH_LOCK 			128
 #define CM_DEVICE_MODULE 		129
@@ -162,14 +162,14 @@
 #define CM_3G_GET_WAKE_STATUS	153
 
 //Joseph 091209
-#define	CM_ROTARY_STATUS 		200	
-#define	CM_GET_KEY_STATUS 		201	
-#define	CM_GET_WHEEL_KEY_STATUS 202	
-#define	POWER_KEEP_COMMAND 		205	
-#define	CM_GET_BATTERY_STATUS 	206	
-#define	CM_SET_ALARM_WAKEUP	 	207	
-#define	CM_WIFI_CTRL	 		208	
-#define	CM_ROTARY_ENABLE 		209	
+#define	CM_ROTARY_STATUS 		200
+#define	CM_GET_KEY_STATUS 		201
+#define	CM_GET_WHEEL_KEY_STATUS 202
+#define	POWER_KEEP_COMMAND 		205
+#define	CM_GET_BATTERY_STATUS 	206
+#define	CM_SET_ALARM_WAKEUP	 	207
+#define	CM_WIFI_CTRL	 		208
+#define	CM_ROTARY_ENABLE 		209
 
 #define CM_GET_UP_VERSION 		215
 
@@ -177,13 +177,25 @@
 // Audio functions ...
 #define CM_AUDIO_GET_VOLUME		230
 #define CM_AUDIO_SET_VOLUME		240
-#define CM_FRONT_LIGHT_SET		241
-#define CM_FRONT_LIGHT_AVAILABLE	242
-#define CM_FRONT_LIGHT_DUTY		243
-#define CM_FRONT_LIGHT_FREQUENCY	244
-#define CM_FRONT_LIGHT_R_EN		245
+
+#define CM_FRONT_LIGHT_SET		245
+#define CM_FRONT_LIGHT_AVAILABLE	246
+#define CM_FRONT_LIGHT_DUTY		247
+#define CM_FRONT_LIGHT_FREQUENCY	248
+#define CM_FRONT_LIGHT_R_EN		249
+
 #define CM_GET_KEYS				107
 
+
+// Terry add 20121220 : Terry param
+#define CM_GET_FB_DONE_RENDER   241
+#define CM_SET_WANT_TO_CHECK_FB_RENDER_STATE   242
+#define CM_SET_SLEEPSCREEN_STATE   243
+#define CM_GET_SLEEPSCREEN_STATE   244
+
+#define UNSET -1;
+#define DEVICE_NORMAL_STATE     1
+#define DEVICE_SLEEP_STATE      2
 
 #ifdef GPIOFN_PWRKEY//[
 static void power_key_chk(unsigned long v);
@@ -217,6 +229,7 @@ EXPORT_SYMBOL(__USB_ADAPTOR__);
 static int Driver_Count = -1;
 unsigned char __TOUCH_LOCK__= 0;
 int gSleep_Mode_Suspend;
+int gFinishKernelBoot = 0; // Terry add 20130119 : add kernel finish booting process flag
 
 extern volatile NTX_HWCONFIG *gptHWCFG;
 
@@ -225,7 +238,7 @@ typedef enum __DEV_MODULE_NAME{
     EB600=1,
     EB600E=2,
     EB600EM=3,
-    COOKIE=4,    
+    COOKIE=4,
 }__dev_module_name;
 
 typedef enum __DEV_MODULE_CPU{
@@ -233,7 +246,7 @@ typedef enum __DEV_MODULE_CPU{
     CPU_S3C2440=1,
     CPU_S3C2416=2,
     CPU_CORETEX_A8=3,
-    CPU_COOKIE=4,    
+    CPU_COOKIE=4,
 }__dev_module_cpu;
 
 typedef enum __DEV_MODULE_CONTROLLER{
@@ -419,6 +432,7 @@ static unsigned char LED_conitnuous=1;
 static int LED_Flash_Count;
 static int gKeepPowerAlive;
 int gMxcPowerKeyIrqTriggered, gIsMSP430IntTriggered, g_power_key_pressed;
+volatile int gBatteryPercentage = 0;
 volatile int g_mxc_touch_triggered = 1;	//gallen 100420
 int g_wakeup_by_alarm;
 int gWifiEnabled=0;
@@ -440,19 +454,28 @@ extern void gpio_uart_inactive(int port, int no_irda);
 extern void mxc_mmc_force_detect(int id);
 extern void tle4913_init(void);
 
+extern int get_FB_State();
+extern void set_want_to_check_fb_state(int want_to_check);
+
 int ntx_charge_status (void);
+int ntx_get_battery_vol (void);
+
+static struct timer_list power_key_timer;
+extern void mxc_kpp_report_power(int isDown);
+
+int g_pwr_key = 0;
 
 //kay 20090925
 //check WiFi ID
 static int check_hardware_wifi(void)
 {
-    return  WIFI_NONE;           
+    return  WIFI_NONE;
 }
 
 //check Bluetooth ID
 static int check_hardware_bt(void)
 {
-    return  BLUETOOTH_NONE;           
+    return  BLUETOOTH_NONE;
 }
 
 static int check_hardware_cpu(void)
@@ -484,7 +507,7 @@ int check_hardware_name(void)
 		gpio_direction_input (GPIO_HWID_3);
 		gpio_request(GPIO_HWID_4, "hwid_4");
 		gpio_direction_input (GPIO_HWID_4);
-#if 0	//READ HW ID		
+#if 0	//READ HW ID
 		/*
 		 *  Note:
 		 *  Comparing to the schematic diagram
@@ -492,12 +515,12 @@ int check_hardware_name(void)
 		 *  the higher (4th) bit is inverted (1 <-> 0)
 		 * 	 ** Noted by William Chen
 		*/
-		
+
 		pcb_id = (gpio_get_value (GPIO_HWID_1)?1:0);
 		pcb_id |= (gpio_get_value (GPIO_HWID_2)?2:0);
 		pcb_id |= (gpio_get_value (GPIO_HWID_3)?4:0);
-		pcb_id |= (gpio_get_value (GPIO_HWID_4)?0:8);  
-		if (7 == pcb_id) 
+		pcb_id |= (gpio_get_value (GPIO_HWID_4)?0:8);
+		if (7 == pcb_id)
 			pcb_id = 4;
 #else   //READ HWCONFIG
 		switch(gptHWCFG->m_val.bPCB)
@@ -536,14 +559,15 @@ int check_hardware_name(void)
 				break;
 			default:
 				pcb_id = gptHWCFG->m_val.bPCB;
-				break;	
+//				printk ("[%s-%d] undefined PCBA ID\n",__func__,__LINE__);
+				break;
 		}
 #endif
 #endif			
 		printk ("[%s-%d] PCBA ID is %d\n",__func__,__LINE__,pcb_id);
 	}
 
-    return pcb_id;      
+    return pcb_id;
 }
 EXPORT_SYMBOL(check_hardware_name);
 
@@ -642,7 +666,7 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 #endif
 	}else{
 		gpio_direction_output(GPIO_WIFI_3V3, 0);	// turn on Wifi_3V3_on
-    	sleep_on_timeout(&Reset_WaitQueue,HZ/50);			
+    	sleep_on_timeout(&Reset_WaitQueue,HZ/50);
 		gpio_set_value(GPIO_WIFI_RST, 1);		// turn on wifi_RST
 		wifi_sdio_enable (1);
 #ifdef _WIFI_ALWAYS_ON_
@@ -716,18 +740,33 @@ int power_key_status (void)
 		return gpio_get_value (GPIO_PWR_SW)?0:1;
 }
 
+//Terry add 20121220 : save device state
+static int g_device_state = UNSET;
+void setDeviceState (int current_state) {
+    g_device_state = current_state;
+}
+
+int getDeviceState () {
+    return g_device_state;
+}
+
 static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int command, unsigned long arg)
 {
 	unsigned long i = 0, temp;
 	unsigned int p = arg;//*(unsigned int *)arg;
 	static unsigned int  last_FL_duty = 0;
 	static unsigned int  current_FL_freq = 0xFFFF;
-  struct ebook_device_info info;  
-  	
+  struct ebook_device_info info;
+   int FB_state = UNSET;
+   int want_to_check = UNSET;
+   int current_device_state = UNSET;
+
 	if(!Driver_Count){
 		printk("pvi_io : do not open\n");
-		return -1;	
+		return -1;
 	}
+
+	printk("[mx50_ntx_io::%s-%d] (command=0x%x, arg=0x%x)\n", __func__, __LINE__, command, p);
 
 	switch(command)
 	{
@@ -753,7 +792,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 			}
 			break;
-			
+
 		case SYS_AUTO_POWER_ON:
 			msp430_auto_power(p);
 		    while (1) {
@@ -763,7 +802,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 			}
 			break;
-			
+
 		case POWER_KEEP_COMMAND:
 			printk("Kernel---System Keep Alive --- %d\n",p);
 			gKeepPowerAlive=p;
@@ -774,7 +813,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			else
 				msp430_powerkeep(0);
 			break;
-			
+
 		case CM_GET_BATTERY_STATUS:
 			if (gUSB_Change_Tick) {
 				if (500 < (jiffies - gUSB_Change_Tick)) {
@@ -782,14 +821,14 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					gLastBatValue = 0;
 				}
 			}
-			
+
 			if ((6 == check_hardware_name()) || (2 == check_hardware_name())) {		// E60632 || E50602
 				i = 1023;
 				copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
-	
+
 				break;
 			}
-	
+
 			if (gIsMSP430IntTriggered || !gLastBatValue || ((0==gUSB_Change_Tick) && (200 < (jiffies - gLastBatTick)))) {
 				i = msp430_battery ();
 	 			if (i) {
@@ -809,7 +848,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 						if (!gLastBatValue)
 							gLastBatValue = i;
 						if (gpio_get_value (GPIO_ACIN_PG)) {// not charging
-							if (gLastBatValue > i) 
+							if (gLastBatValue > i)
 								gLastBatValue = i;
 							else
 								i = gLastBatValue;
@@ -832,18 +871,18 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 
 			break;
-			
+
 		case AC_IN:
 			i = gpio_get_value (GPIO_ACIN_PG)?0:1;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
-			break;	
+			break;
 
 		case CM_SD_IN:
 			g_ioctl_SD_status = gpio_get_value (SD2_CD);
 			i = (g_ioctl_SD_status)?0:1;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case CM_USB_Plug_IN:
 			g_ioctl_USB_status = gpio_get_value (GPIO_ACIN_PG);
 #if 0
@@ -851,13 +890,13 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				g_ioctl_USB_status = 0;
 			else
 				g_ioctl_USB_status = 1;
-#endif			
+#endif
 			i = (g_ioctl_USB_status)?0:1;
-			if (!g_Cus_Ctrl_Led) 
+			if (!g_Cus_Ctrl_Led)
 				gpio_set_value (GPIO_CHG_LED,g_ioctl_USB_status);
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case GET_LnBATT_CPU:
 			break;
 		case GET_VBATT_TH:
@@ -885,6 +924,8 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			break;
 		case CM_nLED:
 			//printk("CM_nLED %d\n",p);
+			LED_conitnuous = 0;
+#if 0 // Angor
 			switch (check_hardware_name())
 			{
 				case 4:  //E60622
@@ -896,11 +937,17 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					gpio_set_value (GPIO_LED_ON,p);
 				break;
 			}
-			break;			
-			
+#else
+			if (1 == check_hardware_name())
+	        	gpio_set_value (GPIO_LED_ON,p);
+	        else
+	        	gpio_set_value (GPIO_ACT_ON,p);
+#endif
+			break;
+
 		case CM_nLED_CPU:
-			break;			
-			
+			break;
+
 		case CM_SD_PROTECT:
 #if 1
 			i = 0;
@@ -909,17 +956,17 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 #endif
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case CM_CONTROLLER:
             i = 2;	// 2: Epson controller. for micro window
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case CM_USB_AC_STATUS:
 			i = 0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case CM_RTC_WAKEUP_FLAG:
 			if (!g_wakeup_by_alarm) {
 				int tmp = msp430_read (0x60);
@@ -935,27 +982,27 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			}
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-			
+
 		case CM_SYSTEM_RESET:
 			printk("Kernel---System reset ---\n");
 			gKeepPowerAlive = 0;
 			msp430_reset();
 			break;
-			
+
 		case CM_USB_HOST_PWR:
 			break;
-			
+
 		case CM_BLUETOOTH_PWR:
 			ntx_wifi_power_ctrl (p);
 			break;
-			
+
         case CM_TELLPID:
 			if(p!=0){
 			    printk("PID %d\n",p);
 			    __EBRMAIN_PID__= p;
 			}
 			break;
-			
+
 		case CM_LED_BLINK:
 		    if (2==p) {
 				spin_lock(&led_flash_lock);
@@ -964,23 +1011,23 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		   	}
 		   	if (!LED_conitnuous)
 		   		wake_up_interruptible(&LED_freeze_WaitQueue);
-			LED_conitnuous = p;         
+			LED_conitnuous = p;
 	      break;
-	      
+
 		case CM_TOUCH_LOCK:
 			if(p==0)
 			{
-		         __TOUCH_LOCK__ = 0;         
+		         __TOUCH_LOCK__ = 0;
 		      }else{
-		         __TOUCH_LOCK__ = 1;        
+		         __TOUCH_LOCK__ = 1;
 		      }
-	      break;  
-      
+	      break;
+
 		case CM_DEVICE_MODULE:
       		i = check_hardware_name();
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
-              	          	
+
 		case CM_BLUETOOTH_RESET:
 			gpio_set_value(GPIO_WIFI_RST, 0);	// WIFI_RST
     		sleep_on_timeout(&Reset_WaitQueue,HZ/100);
@@ -988,13 +1035,13 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			mxc_mmc_force_detect (2);
 			schedule_timeout (500);
 			break;
-			
-		case CM_DEVICE_INFO:		  
+
+		case CM_DEVICE_INFO:
 		  	collect_hardware_info(&info);
 		  	copy_to_user((void __user *)arg, &info, sizeof(info));
-      		break;	
-      		
-		case CM_ROTARY_STATUS:	
+      		break;
+
+		case CM_ROTARY_STATUS:
 			if (2==gptHWCFG->m_val.bRSensor) {
 				i = mma7660_read_orient ();
 				if (2 == check_hardware_name()) {
@@ -1009,8 +1056,8 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			else
 				i = 0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
-      		break;	
-      		
+      		break;
+
 		case CM_ROTARY_ENABLE:	
 			mma7660_irqwake_enable (p);
       break;
@@ -1020,7 +1067,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
 		case CM_POWER_BTN:
-		case CM_GET_KEY_STATUS:	
+		case CM_GET_KEY_STATUS:
 			if (gIsMSP430IntTriggered) {
 				if ((6 != check_hardware_name()) && (2 != check_hardware_name())) {
 					unsigned int tmp;
@@ -1035,20 +1082,20 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 						gMxcPowerKeyIrqTriggered = 1;
 						g_power_key_debounce = 5;	// Joseph 20100921 for ESD
 						g_power_key_pressed = 1;
-						gLastBatTick = jiffies-500;	
+						gLastBatTick = jiffies-500;
 					}
 					else
 						gIsMSP430IntTriggered = 0;
 				}
 			}
-			
+
 			if (g_power_key_pressed) {
 				g_power_key_pressed = 0;
 				i = 1;
 			}
 			else {
-				i = power_key_status ();
-				
+				i = power_key_status();
+
 				if (i) {
 					if (2 >= g_power_key_debounce) { 	// Joseph 20100921 for ESD
 						printk ("[%s-%d] power key bounce detected %d\n",__func__,__LINE__, g_power_key_debounce);
@@ -1067,37 +1114,37 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					gMxcPowerKeyIrqTriggered = 0;
 				}
 			}
-			
+
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			g_mxc_touch_triggered = 0;
-      		break;	
-      		
+      		break;
+
 		case CM_GET_WHEEL_KEY_STATUS:
 			i=0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
-      		break;	
-      		
+      		break;
+
 		case CM_3G_POWER:
-			break;	
-					
+			break;
+
 		case CM_3G_RF_OFF:
-			break;	
-					
+			break;
+
 		case CM_3G_RESET:
-			break;	
-					
-		case CM_WIFI_CTRL:		
+			break;
+
+		case CM_WIFI_CTRL:
 			ntx_wifi_power_ctrl (p);
-			break;	
-					
-		case CM_3G_GET_WAKE_STATUS:	
-			i = 0;	
+			break;
+
+		case CM_3G_GET_WAKE_STATUS:
+			i = 0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
-	    	break;	
-	    	
+	    	break;
+
 		case CM_SET_ALARM_WAKEUP:
-	    	break;	
-	    	
+	    	break;
+
 		case CM_GET_UP_VERSION:
 			i = msp430_deviceid();
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
@@ -1114,7 +1161,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			}
 			break;
-			
+
 		case CM_AUDIO_SET_VOLUME:
 			{
 			#ifdef CONFIG_SND_SOC_ALC5623//[
@@ -1128,7 +1175,6 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			break;
 
 		case CM_FRONT_LIGHT_SET:
-
 			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
 				if (p) {
@@ -1302,6 +1348,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			}
 			break;
 
+#if 0	// UPG
 		case CM_PLATFORM:
 			copy_to_user((void __user *)arg, &platform_type, 32);
 			break;
@@ -1310,18 +1357,41 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				     long));
 			break;
 		case CM_SET_HWCONFIG:
-			if (!capable(CAP_SYS_ADMIN)) 
+			if (!capable(CAP_SYS_ADMIN))
 				return -EPERM;
 			copy_from_user(&hwconfig, (void __user *)arg, sizeof(unsigned long
 				       long));
 			break;
+#endif
 
+        case CM_GET_FB_DONE_RENDER:
+	        FB_state = get_FB_State();
+            //printk("CM_GET_FB_DONE_RENDER trigger !!\n");
+	        //printk("FB_state = %d",FB_state);
+	        copy_to_user((void __user *)arg, &FB_state, sizeof(int));
+	        break;
+
+	    case CM_SET_WANT_TO_CHECK_FB_RENDER_STATE:
+	        want_to_check = UNSET;
+	        copy_from_user(&want_to_check, (void __user *)arg, sizeof(int));
+	        //printk("CM_SET_WANT_TO_CHECK_FB_RENDER_STATE trigger !!\n");
+	        //printk("NTX want_to_check = %d\n",want_to_check);
+		    set_want_to_check_fb_state(want_to_check);
+	        break;
+	    case CM_SET_SLEEPSCREEN_STATE:
+	        copy_from_user(&current_device_state, (void __user *)arg, sizeof(int));
+	        setDeviceState(current_device_state);
+	        break;
+	    case CM_GET_SLEEPSCREEN_STATE:
+	        current_device_state = getDeviceState();
+	        copy_to_user((void __user *)arg, &current_device_state, sizeof(int));
+	        break;
 		default:
 			printk("pvi_io : do not get the command [%d]\n", command);
 			return -1;
 	}
 	return 0;
-}	
+}
 static struct file_operations driverFops= {
     .owner  	=   THIS_MODULE,
     .open   	=   openDriver,
@@ -1329,21 +1399,21 @@ static struct file_operations driverFops= {
     .release    =   releaseDriver,
 };
 static struct miscdevice driverDevice = {
-	.minor		= DEVICE_MINJOR,
+	.minor		= DEVICE_MINOR,
 	.name		= DEVICE_NAME,
 	.fops		= &driverFops,
 };
 
 // ================================= Simulate MC13892 Signaling LED Driver ================================
 static struct timer_list green_led_timer, blue_led_timer, red_led_timer;
-static unsigned char green_led_dc, blue_led_dc, red_led_dc, \ 
+static unsigned char green_led_dc, blue_led_dc, red_led_dc, \
 					 green_led_period, blue_led_period, red_led_period, \
 					 green_led_flag, blue_led_flag, red_led_flag;
 
 void ntx_led_set_timer (struct timer_list *pTimer, unsigned char dc, unsigned char blink)
 {
 	int period;
-	
+
 	if (0 == dc)
 		return;
 	switch (blink) {
@@ -1504,10 +1574,10 @@ int	rc = 0;
 
 static int LED_Thread(void *param)
 {
-	  sigset_t		thread_signal_mask;	  
+	  sigset_t		thread_signal_mask;
   	siginitsetinv(&thread_signal_mask, sigmask(SIGKILL));
 	  sigprocmask(SIG_SETMASK, &thread_signal_mask, NULL);
-	  
+
     while(1){
       if(freezing(current)){
           printk("freeze 0 !!!!!!!!!!!!!!!!!!!!\n");
@@ -1551,17 +1621,17 @@ static int LED_Thread(void *param)
       	sleep_on_timeout(&LED_blink_WaitQueue,HZ/10);
         LED(1);
       	sleep_on_timeout(&LED_blink_WaitQueue,HZ/10);
-      	if (!green_led_dc) 
+      	if (!green_led_dc)
 	    	LED(0);
       	sleep_on_timeout(&LED_blink_WaitQueue,HZ/10);
       }
       else {
       	sleep_on_timeout(&LED_blink_WaitQueue,HZ/2);
-      	if (!green_led_dc) 
+      	if (!green_led_dc)
 		    LED(0);
 	    sleep_on_timeout(&LED_blink_WaitQueue,HZ/2);
       }
-    }    
+    }
 	return 0;
 }
 
@@ -1607,7 +1677,7 @@ int pxa168_chechk_suspend (void)
 {
 
 	if ( gMxcPowerKeyIrqTriggered || gIsMSP430IntTriggered || g_mxc_touch_triggered) {
-		printk ("[%s-%d] key triggered ( %d, %d, %d)....\n", 
+		printk ("[%s-%d] key triggered ( %d, %d, %d)....\n",
 			__func__, __LINE__, gMxcPowerKeyIrqTriggered, gIsMSP430IntTriggered, g_mxc_touch_triggered);
 		return 0;
 	}
@@ -1650,6 +1720,31 @@ void ntx_report_power(int isDown)
 
 static void power_key_chk(unsigned long v)
 {
+#if 1 // Angor
+	int pwr_key = power_key_status();
+	static bool islongpress = false;
+
+	g_pwr_key = pwr_key;
+
+	if (pwr_key) {
+		++g_power_key_debounce;
+
+		if (2 == g_power_key_debounce)
+			ntx_report_power(1);
+
+		if (g_power_key_debounce > 100 && islongpress == false) {
+		    LED(1);
+		    islongpress = false;
+		}
+
+		mod_timer(&power_key_timer, jiffies + 1);
+	}
+	else {
+		ntx_report_power(0);
+		LED(0);
+		islongpress = false;
+	}
+#else
 	if (power_key_status()) {
 		++g_power_key_debounce;
 		if ((2 == g_power_key_debounce) && gIsCustomerUi)
@@ -1658,6 +1753,7 @@ static void power_key_chk(unsigned long v)
 	}
 	else if (gIsCustomerUi)
 		ntx_report_power(0);
+#endif
 }
 
 void power_key_int_function(void)
@@ -1734,7 +1830,7 @@ int ntx_get_battery_vol (void)
 //		 743,  767,  791,  812,  835,  860,  885,  909,  935,  960,  985, 1010, 1023,
 		 767,  791,  812,  833,  852,  877,  903,  928,  950,  979,  993, 1019, 1023,
 	};
-	
+
 	gIsMSP430IntTriggered = 0;
 	if (gUSB_Change_Tick) {
 		if (500 < (jiffies - gUSB_Change_Tick)) {
@@ -1742,7 +1838,7 @@ int ntx_get_battery_vol (void)
 			gLastBatValue = 0;
 		}
 	}
-	
+
 	if (gIsMSP430IntTriggered || !gLastBatValue || ((0 == gUSB_Change_Tick) && (200 < (jiffies - gLastBatTick)))) {
 		battValue = msp430_battery ();
 		if (battValue) {
@@ -1778,11 +1874,11 @@ int ntx_get_battery_vol (void)
 			battValue = 0;
 		}
 	}
-	else 
+	else
 		battValue = gLastBatValue;
-	
+
 	// transfer to uV to pmic interface.
-	for (i=0; i< sizeof (battGasgauge); i++) {                 
+	for (i=0; i< sizeof (battGasgauge); i++) {
 		if (battValue <= battGasgauge[i]) {
 			if (i && (battValue != battGasgauge[i])) {
 				result = 3000000+ (i-1)*100000;
@@ -1813,12 +1909,12 @@ static irqreturn_t ac_in_int(int irq, void *dev_id)
 	del_timer_sync(&acin_pg_timer);
 
 	gUSB_Change_Tick = jiffies;	// do not check battery value in 6 seconds
-	if (gpio_get_value (GPIO_ACIN_PG)) 
+	if (gpio_get_value (GPIO_ACIN_PG))
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 	else {
 		set_irq_type(irq, IRQF_TRIGGER_RISING);
 	}
-	
+
 	g_acin_pg_debounce = 0;
 
 	if(time_after(jiffies,gdwTheTickToChkACINPlug)) {
@@ -1928,10 +2024,12 @@ static int gpio_initials(void)
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_SS0__GPIO_4_19);
 	gpio_request(GPIO_ACIN_PG, "acin_pg");
 	gpio_direction_input(GPIO_ACIN_PG);
+#if 0 // Terry add 20130128 : we dont need acin ISR because we use msp_int to change charger state
+      // Terry add 20130205 : Bugfix : AC charger can not wake up Android system
 	{
 		/* Set AC in as wakeup resource */
 		irq = gpio_to_irq(GPIO_ACIN_PG);
-		
+
 		if (gpio_get_value (GPIO_ACIN_PG))
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		else
@@ -1944,33 +2042,35 @@ static int gpio_initials(void)
 		acin_pg_timer.function = acin_pg_chk;
 		init_timer(&acin_pg_timer);
 	}
+#endif
+
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_MISO__GPIO_4_18);
 	gpio_request(GPIO_CHG, "charge_det");
 	gpio_direction_input(GPIO_CHG);
-	
+
 	/* ON_LED */
 	mxc_iomux_v3_setup_pad(MX50_PAD_EIM_OE__GPIO_1_24);
 	gpio_request(GPIO_LED_ON, "led_on");
 	gpio_direction_output(GPIO_LED_ON, 1);
-	
+
 	if(gptHWCFG->m_val.bPCB != 30) {  // E606E2
 		mxc_iomux_v3_setup_pad(MX50_PAD_PWM1__GPIO_6_24);
 		gpio_request(GPIO_ACT_ON, "action_on");
 		gpio_direction_output(GPIO_ACT_ON, 1);
 	}
-	
+
 	/* CHG_LED */
 	mxc_iomux_v3_setup_pad(MX50_PAD_EIM_RW__GPIO_1_25);
 	gpio_request(GPIO_CHG_LED, "charge_led");
 	gpio_direction_output(GPIO_CHG_LED, 1);
-	
+
 	/* Audio_PWR_ON */
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_MOSI__GPIO_4_17);
 	gpio_request(GPIO_AUDIO_PWR, "audio_pwr");
 	gpio_direction_input(GPIO_AUDIO_PWR);
-	
+
 	/* AMP_EN */
-	
+
 	/* OFF_CHK */
 	#ifdef GPIOFN_PWRKEY//[
 	gpiofn_register(&gtNTX_PWR_GPIO_data);
@@ -1981,8 +2081,8 @@ static int gpio_initials(void)
 	{
 		/* Set power key as wakeup resource */
 		irq = gpio_to_irq(GPIO_PWR_SW);
-	
-		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602 
+
+		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 			set_irq_type(irq, IRQF_TRIGGER_RISING);
 		else
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);
@@ -1995,12 +2095,11 @@ static int gpio_initials(void)
 	#endif //]GPIOFN_PWRKEY
 	power_key_timer.function = power_key_chk;
 	init_timer(&power_key_timer);
-	
+
 	tle4913_init();
-	
-//	if ((1 == check_hardware_name()) || (10 == check_hardware_name()) || (14 == check_hardware_name())) 	// E60612 , E606A2 ,E606B2 , ir touch 
-	if(4==gptHWCFG->m_val.bTouchType) 
-	{    //IR touch
+
+//	if ((1 == check_hardware_name()) || (10 == check_hardware_name()) || (14 == check_hardware_name())) {	// E60612 , E606A2 ,E606B2 , ir touch
+	if(4==gptHWCFG->m_val.bTouchType) {    //IR touch
 
 		// Touch interrupt
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D7__GPIO_5_15);
@@ -2008,10 +2107,10 @@ static int gpio_initials(void)
 		gpio_direction_input(TOUCH_INT);
 		irq = gpio_to_irq(TOUCH_INT);
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
-		
+
 	    // Touch reset
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
-		gpio_request(IR_TOUCH_RST, "ir_touch_rst");	
+		gpio_request(IR_TOUCH_RST, "ir_touch_rst");
 		gpio_direction_output(IR_TOUCH_RST, 0);
 		msleep(20);
 		gpio_direction_input(IR_TOUCH_RST);
@@ -2021,7 +2120,7 @@ static int gpio_initials(void)
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D7__GPIO_5_27);
 		gpio_request(C_TOUCH_INT, "c_touch_int");
 		gpio_direction_input(C_TOUCH_INT);
-		
+
 #ifdef DIGITIZER_TEST
 		set_irq_type(gpio_to_irq(C_TOUCH_INT), IRQF_TRIGGER_RISING);
 		ret = request_irq(gpio_to_irq(C_TOUCH_INT), c_touch_int, 0, "c_touch", 0);
@@ -2030,24 +2129,24 @@ static int gpio_initials(void)
 		else
 			enable_irq_wake(gpio_to_irq(C_TOUCH_INT));
 #endif
-		
+
 		// Touch reset
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_WP__GPIO_5_28);
 		gpio_request(TOUCH_RST, "touch_rst");
 		gpio_direction_output(TOUCH_RST, 0);
-		
+
 		// Touch power
 		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_SCLK__GPIO_4_16);
 		gpio_request(TOUCH_PWR, "touch_pwr");
 		gpio_direction_output(TOUCH_PWR, 0);
-		
+
 		// Touch enable
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
 		gpio_request(TOUCH_EN, "touch_en");
 #ifdef DIGITIZER_TEST
 #ifdef HANVON_TOUCH
 		gpio_direction_output(TOUCH_EN, 0);
-#else		
+#else
 		gpio_direction_output(TOUCH_EN, 1);	// PVI touch
 #endif
 		gpio_direction_output(TOUCH_RST, 1);
@@ -2081,8 +2180,8 @@ static int gpio_initials(void)
 	if (4 == check_hardware_name() || 3 == check_hardware_name()) {
 		// MMA7660 INT
 	}
-	else if (2 == check_hardware_name()) {	
-			
+	else if (2 == check_hardware_name()) {
+
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSL);
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSL);
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSL);
@@ -2093,9 +2192,9 @@ static int gpio_initials(void)
 
 	switch (gptHWCFG->m_val.bPCB) {
 		case 21: // E60610D
-		case 22: // E606AX 
+		case 22: // E606AX
 		{
-			// E60610D 
+			// E60610D
 			printk("ESD DSM\n");
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSM);
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSM);
@@ -2107,7 +2206,7 @@ static int gpio_initials(void)
 		break;
 		case 28:
 		{
-			// E606CX 
+			// E606CX
 			printk("E606CX,ESD DSL/ISD DSM\n");
 			// External SD .
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_CLK__SD1_CLK_DSL);
@@ -2123,11 +2222,9 @@ static int gpio_initials(void)
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D1__SD3_D1_DSM);
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D2__SD3_D2_DSM);
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D3__SD3_D3_DSM);
-
-			
 		}
 		break;
-		case 30: // E606E2 
+		case 30: // E606E2
 		{
 			printk("ESD/ISD DSM\n");
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSM);
@@ -2149,10 +2246,10 @@ static int gpio_initials(void)
 		default :
 		break;
 	}
-	
-	
+
+
 	// FL_EN
-	if( 0 != gptHWCFG->m_val.bFrontLight ){
+	if( 0 != gptHWCFG->m_val.bFrontLight) {
 		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_MISO__GPIO_4_14);
 		gpio_request(FL_EN, "fl_en");
 
@@ -2164,20 +2261,21 @@ static int gpio_initials(void)
 		}
 		INIT_DELAYED_WORK(&FL_off, FL_off_func);
 	}
-	
-	// WIFI_3V3_ON 
+
+	// WIFI_3V3_ON
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_SCLK__GPIO_4_12);
 	gpio_request(GPIO_WIFI_3V3, "wifi_3v3");
 	gpio_direction_input(GPIO_WIFI_3V3);
-		
+//	gpio_direction_output(GPIO_WIFI_3V3, 0);
+
 	// WIFI_1V8_ON
-		
+
 	// WIFI_RST
 	mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D6__GPIO_5_14);
 	gpio_request(GPIO_WIFI_RST, "wifi_rst");
 	gpio_direction_output(GPIO_WIFI_RST,0);
-	
-	// WIFI_IRQ 
+
+	// WIFI_IRQ
 	mxc_iomux_v3_setup_pad(MX50_PAD_CSPI_SCLK__GPIO_4_8);
 	gpio_request(GPIO_WIFI_INT, "wifi_int");
 	gpio_direction_input(GPIO_WIFI_INT);
@@ -2278,28 +2376,28 @@ static int gpio_initials(void)
 	{
 		/* Set power key as wakeup resource */
 		int irq, ret;
-	
+
 		irq = gpio_to_irq(GPIO_KEY_ROW_0);
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, gpio_key_row_int, 0, "gpio_key_row_0", 0);
 		if (ret)
 			pr_info("register gpio_key_row_0 interrupt failed\n");
 		enable_irq_wake (irq);
-	
+
 		irq = gpio_to_irq(GPIO_KEY_ROW_1);
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, gpio_key_row_int, 0, "gpio_key_row_1", 0);
 		if (ret)
 			pr_info("register gpio_key_row_1 interrupt failed\n");
 		enable_irq_wake (irq);
-	
+
 		irq = gpio_to_irq(GPIO_KEY_ROW_2);
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, gpio_key_row_int, 0, "gpio_key_row_2", 0);
 		if (ret)
 			pr_info("register gpio_key_row_2 interrupt failed\n");
 		enable_irq_wake (irq);
-	
+
 		irq = gpio_to_irq(GPIO_KEY_ROW_3);
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, gpio_key_row_int, 0, "gpio_key_row_3", 0);
@@ -2352,7 +2450,7 @@ void ntx_gpio_suspend (void)
 	printk ("\t UART1 UCR1 0x%08X\n",__raw_readl(ioremap(MX53_BASE_ADDR(UART1_BASE_ADDR), SZ_4K)+0x80));
 	printk ("\t UART2 UCR1 0x%08X\n", __raw_readl(ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80));
 //	printk ("\t FEC ECR	0x%08X\n",__raw_readl(ioremap(MX53_BASE_ADDR(FEC_BASE_ADDR), SZ_4K)+0x24));
-	
+
 	printk ("\t UH1_PORTSC1	0x%08X\n",UH1_PORTSC1);
 	printk ("\t USBH1_PHY_CTRL0	0x%08X\n",USBH1_PHY_CTRL0);
 	printk ("\t USB_CLKONOFF_CTRL	0x%08X\n",USB_CLKONOFF_CTRL);
@@ -2361,7 +2459,7 @@ void ntx_gpio_suspend (void)
 #endif
 
 	g_wakeup_by_alarm = 0;
-	if (gUSB_Change_Tick) 
+	if (gUSB_Change_Tick)
 		gUSB_Change_Tick = 0;
 
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
@@ -2370,25 +2468,25 @@ void ntx_gpio_suspend (void)
 		mdelay (20);
 		disable_irq(gpio_to_irq(C_TOUCH_INT));
 		gpio_direction_output(C_TOUCH_INT, 0);
-		
+
 		mdelay (20);
-		
+
 		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SDA__GPIO_6_19);
 		gpio_request((5*32+19), "GPIO_6_19");
 		gpio_direction_output((5*32+19),0);
-		
+
 		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SCL__GPIO_6_18);
 		gpio_request((5*32+18), "GPIO_6_18");
 		gpio_direction_output((5*32+18),0);
-		
+
 #ifndef DIGITIZER_TEST
 		gpio_direction_output(TOUCH_EN, 0);
 		gpio_direction_output(TOUCH_RST, 0);
 		gpio_direction_output(TOUCH_PWR, 1);
 #endif
 	}
-	
-	// turn off wifi power 
+
+	// turn off wifi power
 #ifndef _WIFI_ALWAYS_ON_
 	gpio_direction_input(GPIO_WIFI_3V3);
 	gpio_direction_output(GPIO_WIFI_RST,0);
@@ -2410,7 +2508,7 @@ void ntx_gpio_suspend (void)
 	gpio_request((5*32+20), "GPIO_6_20");
 	gpio_direction_output((5*32+20),0);
 
-	
+
 	gpio_set_value (GPIO_CHG_LED, 1);
 	gpio_set_value (GPIO_LED_ON, 1);
 	gpio_set_value (GPIO_ACT_ON, 1);
@@ -2418,14 +2516,15 @@ void ntx_gpio_suspend (void)
 	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_SET);	// Powers down the bandgap reference
 	gUart2_ucr1 = __raw_readl(ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	__raw_writel(0, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
-	
+
 }
 
 void ntx_gpio_resume (void)
 {
+
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
-	
+
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
 #ifndef DIGITIZER_TEST
@@ -2442,9 +2541,13 @@ void ntx_gpio_resume (void)
 		enable_irq(gpio_to_irq(C_TOUCH_INT));
 
 	}
-	
-#if 1	
-	g_power_key_pressed = power_key_status();	// POWER key
+
+#if 1
+//	g_power_key_pressed = power_key_status();	// POWER key
+	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
+	else
+		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?0:1;	// POWER key
 #endif
 
 	// turn on audio power
@@ -2514,7 +2617,7 @@ void ntx_machine_restart(char mode, const char *cmd)
 static int __init initDriver(void)
 {
 	int ret;
-        
+
 	ret = misc_register(&driverDevice);
 	if (ret < 0) {
 		printk("pvi_io: can't get major number\n");
@@ -2548,7 +2651,7 @@ static int __init initDriver(void)
 			//ASSERT(gi_ntx_gpio_buttons_total<NTX_GPIO_KEYS_MAX);
 		}
 		if(gptHWCFG->m_val.bPCB == 28) {	
-			ntx_gpio_buttons[gi_ntx_gpio_buttons_total].code=KEY_FL; 
+			ntx_gpio_buttons[gi_ntx_gpio_buttons_total].code=KEY_HOME; // KEY_FL; 
 			ntx_gpio_buttons[gi_ntx_gpio_buttons_total].gpio=GPIO_KEY_ROW_0;
 			ntx_gpio_buttons[gi_ntx_gpio_buttons_total].active_low=1;
 			ntx_gpio_buttons[gi_ntx_gpio_buttons_total].type=EV_KEY;
@@ -2579,7 +2682,10 @@ static int __init initDriver(void)
 	init_timer(&blue_led_timer);
 	red_led_timer.function = red_led_blink_func;
 	init_timer(&red_led_timer);
-	
+
+//	Angor: turn off LED blinking
+	LED_conitnuous = 0;
+
 	arm_pm_restart = ntx_machine_restart;
 
 	return 0;
