@@ -48,6 +48,8 @@ static void pwrkey_event_handler(void *param)
 
 	pressed = mxc_pwrkey->get_status((int)param);
 
+	printk ("[%s-%d] pressed=%d)\n", __func__, __LINE__, pressed);
+
 	if (pressed) {
 		input_report_key(
 			mxc_pwrkey->input, mxc_pwrkey->value, 1);
