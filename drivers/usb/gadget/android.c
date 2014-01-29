@@ -382,7 +382,7 @@ static int android_probe(struct platform_device *pdev)
 		if (pdata->serial_number){
 			strings_dev[STRING_SERIAL_IDX].s = pdata->serial_number;
 		}
-/*
+
 		//angela add serial number
 		int proc_cmdline_size = 64;
 		char proc_cmdline[proc_cmdline_size];
@@ -403,7 +403,7 @@ static int android_probe(struct platform_device *pdev)
 			}
 			pr_info("angela test : strings_dev[STRING_SERIAL_IDX].s = %s\n", strings_dev[STRING_SERIAL_IDX].s);
 		}
-*/
+
 	} else {
 		dev_warn(&pdev->dev, "No platform data found, refuse to probe\n");
 		return -ENODEV;
