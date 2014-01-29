@@ -927,11 +927,13 @@ static struct keypad_data keypad_plat_data = {
 }
 
 static struct gpio_keys_button ntx_gpio_key[] = {
-	GPIO_BUTTON(GPIO_KEY_FL, 90, 1, "front_light", 1),			// Front light
-	GPIO_BUTTON(GPIO_KEY_GP_4_3, 103, 1, "gpio_key_4_3", 1),	// Up
-	GPIO_BUTTON(GPIO_KEY_GP_4_4, 108, 1, "gpio_key_4_4", 1),	// Down
-	GPIO_BUTTON(GPIO_KEY_GP_4_5, 105, 1, "gpio_key_4_5", 1),	// Left
-	GPIO_BUTTON(GPIO_KEY_GP_4_6, 106, 1, "gpio_key_4_6", 1),	// Right
+	GPIO_BUTTON(GPIO_KEY_FL, KEY_HOME, 1, "home", 1),
+//	GPIO_BUTTON(GPIO_KEY_FL, 90, 1, "front_light", 1),			// Front light
+//	GPIO_BUTTON(GPIO_KEY_GP_4_3, 103, 1, "gpio_key_4_3", 1),	// Up
+//	GPIO_BUTTON(GPIO_KEY_GP_4_4, 108, 1, "gpio_key_4_4", 1),	// Down
+//	GPIO_BUTTON(GPIO_KEY_GP_4_5, 105, 1, "gpio_key_4_5", 1),	// Left
+//	GPIO_BUTTON(GPIO_KEY_GP_4_6, 106, 1, "gpio_key_4_6", 1),	// Right
+
 //	GPIO_BUTTON(GPIO_KEY_GP_4_7, 28, 1, "gpio_key_4_7", 1),		// Return
 //	GPIO_BUTTON(HALLSENSOR_KEY, KEY_F1, 1, "hall", 1),
 };
@@ -1294,7 +1296,7 @@ static void epdc_enable_pins(void)
 	gpio_direction_input(EPDC_SDSHR);
 //	gpio_direction_input(EPDC_BDR0);
 	gpio_direction_input(EPDC_BDR1);
-	//gpio_direction_input(EPDC_VCOM);
+//	gpio_direction_input(EPDC_VCOM);
 	gpio_direction_input(EPDC_SDCE0);
 	gpio_direction_input(EPDC_SDCE1);
 	gpio_direction_input(EPDC_SDCE2);
@@ -1521,7 +1523,7 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 		0, 	/* GDOE_OFF */
 		11, 	/* gdclk_offs */
 		3, 	/* num_ce */
-},	
+},
 
 ////////////////////
 {
@@ -1537,7 +1539,7 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 271,        /* gdclk_offs */
 1,            /* num_ce */},
 };
- 
+
 #elif defined(EPD_TIMING_TW20110815) //][
 
 static struct fb_videomode ed060sc8_mode = {
@@ -1825,18 +1827,18 @@ static int mxc_alc5623_amp_enable(int enable)
 static int mxc_alc5623_clock_enable(int enable)
 {
 	static struct pwm_device *pwm_dev;
-	
+
 	printk ("[%s-%d] %s...\n",__func__,__LINE__,(enable)?"enable":"disable");
 	if (!pwm_dev)
 		 pwm_dev = pwm_request(1, "codec clock");
 	else
 		return 0;
-	
+
 	if (0 >= pwm_dev) {
 		printk ("[%s-%d] Failed request pwm clock ...\n",__func__,__LINE__);
 		return 0;
 	}
-	
+
 	if (enable) {
 		pwm_config(pwm_dev, 40, 60);
 		pwm_enable(pwm_dev);
@@ -2611,7 +2613,7 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 	}
 
 	if (mem_tag) {
-
+#ifndef DISABLE_GPU
 		android_pmem_data.start = mem_tag->u.mem.start
 			+ total_mem - pmem_gpu_size - pmem_size;
 		android_pmem_gpu_data.start = android_pmem_data.start
@@ -2619,6 +2621,9 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 
 		mem_tag->u.mem.size =
 			android_pmem_data.start - mem_tag->u.mem.start;
+#else
+		mem_tag->u.mem.size = total_mem;
+#endif
 
 	}
 #endif
@@ -2788,7 +2793,7 @@ static int _MYINIT_TEXT hwcfg_p_setup(char *str)
 	}
 	printk("%s() hwcfg_p=%p,vaddr=%p,size=%d\n",__FUNCTION__,
 		gpbHWCFG_paddr,gptHWCFG,gdwHWCFG_size);
-		
+
 	if(NtxHwCfg_ChkCfgHeaderEx(gptHWCFG,1)>=0) {
 		//printk("%s() ntx_hwconfig load success !!\n",__FUNCTION__);
 		printk("%s() pcba=\"%s\" !!\n",__FUNCTION__,NtxHwCfg_GetCfgFldStrVal(gptHWCFG,HWCFG_FLDIDX_PCB));
@@ -2801,7 +2806,7 @@ static int _MYINIT_TEXT hwcfg_p_setup(char *str)
 	else {
 		printk("%s() ntx_hwconfig check fail !!\n",__FUNCTION__);
 	}
-	
+
 	return 1;
 }
 
@@ -2820,22 +2825,22 @@ static void _parse_cmdline(void)
 
 	char *szParsePatternA[]={"hwcfg_sz=","hwcfg_p="};
 	int ((*pfnDispatchA[])(char *str))={hwcfg_size_setup,hwcfg_p_setup };
-		
+
 	int i;
 	char *pszCmdLineBuf;
-	
-	
+
+
 	if(iParseCnt++>0) {
 		printk("%s : cmdline parse already done .\n",__FUNCTION__);
 		return ;
 	}
 	//printk("%s():cmdline(%d)=%s\n",__FUNCTION__,strlen(saved_command_line),saved_command_line);
-		
+
 	pszCmdLineBuf = kmalloc(strlen(saved_command_line)+1,GFP_KERNEL);
 	//ASSERT(pszCmdLineBuf);
 	strcpy(pszCmdLineBuf,saved_command_line);
 	//printk("%s():cp cmdline=%s\n",__FUNCTION__,pszCmdLineBuf);
-	
+
 	for(i=0;i<sizeof(szParsePatternA)/sizeof(szParsePatternA[0]);i++) {
 		ulPatternLen = strlen(szParsePatternA[i]);
 		pcPatternStart = strstr(pszCmdLineBuf,szParsePatternA[i]);
@@ -2892,8 +2897,6 @@ static void __init mxc_board_init(void)
 
 	_parse_cmdline();
 
-	
-
 	mxc_cpu_common_init();
 	mx50_rdp_io_init();
 
@@ -2916,7 +2919,7 @@ static void __init mxc_board_init(void)
 //	mxc_register_device(&mxci2c_devices[1], &mxci2c_data);
 	mxc_register_device(&mxci2c_devices[1], &mxci2c_100K_data);
 	mxc_register_device(&mxci2c_devices[2], &mxci2c_100K_data);
-	
+
 	mxc_register_device(&mxc_rtc_device, NULL);
 //	mxc_register_device(&mxc_w1_master_device, &mxc_w1_data);
 //	mxc_register_device(&gpu_device, &z160_revision);
@@ -2925,7 +2928,6 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxc_pxp_v4l2, NULL);
 	mxc_register_device(&pm_device, &mx50_pm_data);
 //	if (enable_keypad)
-	
 
 	iHWID = check_hardware_name();
 
@@ -2995,9 +2997,10 @@ static void __init mxc_board_init(void)
 		else {
 		}
 
+//		printk("[%s-%d] gptHWCFG->m_val.bKeyPad=%d\n", __func__, __LINE__, gptHWCFG->m_val.bKeyPad);
 		if(11==gptHWCFG->m_val.bKeyPad) {
 			// FrontLight key only ...
-			keypad_plat_data.matrix = FL_keymapping;
+			keypad_plat_data.matrix = HOME_keymapping; // FL_keymapping;
 		}
 		else if(13==gptHWCFG->m_val.bKeyPad){
 			//  FrontLight + HOME key
@@ -3025,11 +3028,13 @@ static void __init mxc_board_init(void)
 #endif
 	if(!NTXHWCFG_TST_FLAG(gptHWCFG->m_val.bPCB_Flags,0)) {   
 		// key matrix : ON
+//		printk("[%s-%d] key matrix : ON\n", __func__, __LINE__);
 		mxc_register_device(&mxc_keypad_device, &keypad_plat_data);
 	}
 
 	if( NTXHWCFG_TST_FLAG(gptHWCFG->m_val.bPCB_Flags,1) ) {
 		// FPC touch : ON
+//		printk("[%s-%d] FPC touch : ON\n", __func__, __LINE__);
 		i2c_register_board_info(1,&mxc_i2c_msp430touch_binfo,1);
 		i2c_register_board_info(0,&mxc_i2c_msp430touch_binfo,1);
 		mxc_iomux_v3_setup_pad(MX50_PAD_KEY_ROW3__GPIO_4_7);
@@ -3091,7 +3096,6 @@ static void __init mxc_board_init(void)
 		mxcsdhc2_device.resource[2].start = gpio_to_irq(SD2_CD);
 		mxcsdhc2_device.resource[2].end = gpio_to_irq(SD2_CD);
 
-
 		mxc_register_device(&mxcsdhc1_device, &mmc1_data);
 		mxc_register_device(&mxcsdhc2_device, &mmc2_data);
 		mxc_register_device(&mxcsdhc3_device, &mmc_wifi_data);
@@ -3106,14 +3110,15 @@ static void __init mxc_board_init(void)
 */
 
 // Angor
-/*
-//	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
-//	mxc_register_device(&mxc_android_pmem_gpu_device,
-//					&android_pmem_gpu_data);
+#ifndef DISABLE_GPU
+	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
+	mxc_register_device(&mxc_android_pmem_gpu_device,
+					&android_pmem_gpu_data);
+#endif
 	mxc_register_device(&usb_mass_storage_device, &mass_storage_data);
-	mxc_register_device(&usb_rndis_device, &rndis_data);
+//	mxc_register_device(&usb_rndis_device, &rndis_data);
 	mxc_register_device(&android_usb_device, &android_usb_data);
-*/
+
 // Angor
 
 //	mxc_register_device(&max17135_sensor_device, NULL);
@@ -3129,7 +3134,7 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&dcp_device, NULL);
 
 // Angor:
-	mxc_register_device(&mxc_usb_plug_device, &usbplug_data);
+//	mxc_register_device(&mxc_usb_plug_device, &usbplug_data);
 
 //	mxc_register_device(&mxc_powerkey_device, &pwrkey_data);
 	mxc_register_device(&fixed_volt_reg_device, &fixed_volt_reg_pdata);
@@ -3157,6 +3162,7 @@ static void __init mx50_rdp_timer_init(void)
 #if 1
 	early_console_setup(MX53_BASE_ADDR(UART2_BASE_ADDR), uart_clk);
 #else
+
 	early_console_setup(MX53_BASE_ADDR(UART1_BASE_ADDR), uart_clk);
 #endif
 }
@@ -3196,7 +3202,7 @@ static void __init fixup_android_board(struct machine_desc *desc, struct tag *ta
 	}
 
 	if (mem_tag) {
-
+#ifndef DISABLE_GPU
 		android_pmem_data.start = mem_tag->u.mem.start
 			+ total_mem - pmem_gpu_size - pmem_size;
 		android_pmem_gpu_data.start = android_pmem_data.start
@@ -3204,9 +3210,10 @@ static void __init fixup_android_board(struct machine_desc *desc, struct tag *ta
 
 		mem_tag->u.mem.size =
 			android_pmem_data.start - mem_tag->u.mem.start;
-
+#else
+		mem_tag->u.mem.size = total_mem;
+#endif
 	}
-
 }
 // Angor
 #endif
