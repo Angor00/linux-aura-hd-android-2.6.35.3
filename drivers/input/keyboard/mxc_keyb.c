@@ -1158,6 +1158,7 @@ static int mxc_kpp_remove(struct platform_device *pdev)
 void mxc_kpp_report_key(int isDown,__u16 wKeyCode)
 {
 	if (mxckbd_dev) {
+	printk ("[%s-%d] (isDown=%d, wKeyCode=%d)\n", __func__, __LINE__, isDown, wKeyCode);
 		input_event(mxckbd_dev, EV_KEY, wKeyCode, isDown);
 	}
 }
