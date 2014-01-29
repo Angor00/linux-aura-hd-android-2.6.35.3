@@ -620,12 +620,14 @@ static void __exit gpio_keys_exit(void)
 void gpiokeys_report_key(int isDown,__u16 wKeyCode)
 {
 	if (pindev) {
+		printk ("[%s-%d] gpiokeys_report_power(%d, 0x%x)\n", __func__, __LINE__, isDown, wKeyCode);
 		input_event(pindev, EV_KEY, wKeyCode, isDown);
 	}
 }
 
 void gpiokeys_report_power(int isDown)
 {
+//	printk ("[%s-%d] gpiokeys_report_power(%d)\n", __func__, __LINE__, isDown);
 	gpiokeys_report_key(isDown,KEY_POWER);
 }
 
