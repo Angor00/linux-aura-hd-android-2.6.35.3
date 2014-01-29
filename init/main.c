@@ -78,6 +78,8 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+#include <linux/reboot.h>	/* For kernel_power_off() :angela add*/
+
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
@@ -98,6 +100,10 @@ static inline void mark_rodata_ro(void) { }
 #ifdef CONFIG_TC
 extern void tc_init(void);
 #endif
+
+//angela
+extern int ntx_get_battery_vol (void);
+extern int POWER_LOW_LIMIT;
 
 enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
@@ -540,8 +546,6 @@ static void __init mm_init(void)
 //angela add serial number
 void _cmdline_serialno(char *serialno_str)
 {
-#if 0
-/*
 	char proc_cmdline[COMMAND_LINE_SIZE];
 	memcpy(proc_cmdline, boot_command_line, COMMAND_LINE_SIZE);
 	proc_cmdline[COMMAND_LINE_SIZE-1] = '\0';
@@ -559,10 +563,8 @@ void _cmdline_serialno(char *serialno_str)
 
 		strcpy(serialno_str, serialno);
 	}else{
-*/
 		strcpy(serialno_str, "no_serialno_cmd");
-//	}
-#endif
+	}
 }
 
 asmlinkage void __init start_kernel(void)
@@ -954,6 +956,13 @@ static int __init kernel_init(void * unused)
 	 * we're essentially up and running. Get rid of the
 	 * initmem segments and start the user-mode stuff..
 	 */
+
+	//angela 20121221 : when battery value lower than POWER_LOW_LIMIT(5), kernel power off
+	//printk("***************** ntx_get_battery_vol = %d***********************\n", ntx_get_battery_vol());
+/*	if (ntx_get_battery_vol() < POWER_LOW_LIMIT ){
+		kernel_power_off();
+	}
+*/
 
 	init_post();
 	return 0;
