@@ -322,6 +322,7 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
 
 	input_event(input, type, button->code, !!state);
+	printk ("[%s-%d] (!!state=%d, button->code=%d)\n", __func__, __LINE__, !!state,  button->code);
 //	input_sync(input);
 }
 
@@ -617,17 +618,27 @@ static void __exit gpio_keys_exit(void)
 	platform_driver_unregister(&gpio_keys_device_driver);
 }
 
+void gpiokeys_report_sw(int isDown, __u16 wKeyCode)
+{
+	if (pindev) {
+		printk("[%s-%d] (isDown=%d, wKeyCode=%d)\n", __func__, __LINE__, isDown, wKeyCode);
+		input_event(pindev, EV_SW, wKeyCode, isDown);
+		input_sync(pindev);
+	}
+}
+
 void gpiokeys_report_key(int isDown,__u16 wKeyCode)
 {
 	if (pindev) {
-		printk ("[%s-%d] gpiokeys_report_power(%d, 0x%x)\n", __func__, __LINE__, isDown, wKeyCode);
+		printk("[%s-%d] (isDown=%d, wKeyCode=%d)\n", __func__, __LINE__, isDown, wKeyCode);
 		input_event(pindev, EV_KEY, wKeyCode, isDown);
+		input_sync(pindev);
 	}
 }
 
 void gpiokeys_report_power(int isDown)
 {
-//	printk ("[%s-%d] gpiokeys_report_power(%d)\n", __func__, __LINE__, isDown);
+//	printk("[%s-%d] gpiokeys_report_power(%d)\n", __func__, __LINE__, isDown);
 	gpiokeys_report_key(isDown,KEY_POWER);
 }
 
