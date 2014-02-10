@@ -24,6 +24,7 @@
 
 extern volatile NTX_HWCONFIG *gptHWCFG;
 extern void ntx_report_key(int isDown,__u16 wKeyCode);
+extern void ntx_report_sw(int isDown, __u16 wKeyCode);
 extern int gIsCustomerUi;
 extern void power_key_int_function(void);
 extern void ntx_report_power(int isDown);
@@ -50,14 +51,15 @@ static GPIODATA gtTLE4913_GPIO_data = {
 static int tle4913Q_func(int iGPIOVal,unsigned uGPIO)
 {
 	DBG0_MSG("%s(%d): gpio%u,val=%d\n",__FILE__,__LINE__,uGPIO,iGPIOVal);
-	
+/*
 	if(gIsCustomerUi) {
 		ntx_report_key(iGPIOVal?0:1,KEY_F1);
 	}
 	else {
 		ntx_report_key(iGPIOVal?0:1,KEY_H);
 	}
-	
+*/
+	ntx_report_sw(iGPIOVal ? 0 : 1, SW_LID);
 	return 0;
 }
 
