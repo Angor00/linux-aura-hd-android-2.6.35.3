@@ -1698,6 +1698,19 @@ int pxa168_chechk_suspend (void)
 
 static struct timer_list power_key_timer;
 
+extern void mxc_kpp_report_sw(int isDown,__u16 wKeyCode);
+extern void gpiokeys_report_sw(int isDown,__u16 wKeyCode);
+
+void ntx_report_sw(int isDown, __u16 wKeyCode)
+{
+	if(NTXHWCFG_TST_FLAG(gptHWCFG->m_val.bPCB_Flags, 0)) {
+		// no keymatrix .
+		gpiokeys_report_sw(isDown, wKeyCode);
+	} else {
+		mxc_kpp_report_sw(isDown, wKeyCode);
+	}
+}
+
 extern void mxc_kpp_report_key(int isDown,__u16 wKeyCode);
 extern void gpiokeys_report_key(int isDown,__u16 wKeyCode);
 extern void mxc_kpp_report_power(int isDown);
