@@ -384,7 +384,7 @@ static int android_probe(struct platform_device *pdev)
 		}
 
 		//angela add serial number
-		int proc_cmdline_size = 64;
+		int proc_cmdline_size = COMMAND_LINE_SIZE;
 		char proc_cmdline[proc_cmdline_size];
 		memset(proc_cmdline, 0x0, proc_cmdline_size);
 		extern _cmdline_serialno();
