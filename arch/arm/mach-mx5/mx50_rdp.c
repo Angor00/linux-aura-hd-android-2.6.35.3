@@ -2295,7 +2295,7 @@ static int mxc_pwrkey_getstatus(int id)
 }
 
 static struct power_key_platform_data pwrkey_data = {
-	.key_value = KEY_F4,
+	.key_value = KEY_POWER,
 	.register_pwrkey = mxc_register_powerkey,
 	.get_key_status = mxc_pwrkey_getstatus,
 };
